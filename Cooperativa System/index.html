@@ -1,0 +1,130 @@
+<!doctype html>
+<html lang="pt"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Estoque de livros</title>
+<style>
+:root{--bg:#eef2f5;--ink:#1b2a41;--mut:#5b6b7f;--ac:#0f766e;--ln:#cfd8e0;--card:#fff}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.5 system-ui,sans-serif}
+h1,h2{font-family:Georgia,'Iowan Old Style',serif;font-weight:700;margin:1.6rem 0 .6rem}h2{font-size:1.25rem}
+nav{display:flex;gap:.25rem;overflow-x:auto;background:var(--ink);padding:.5rem;position:sticky;top:0}
+nav button{background:none;border:0;color:#b9c6d6;padding:.5rem .9rem;border-radius:6px;font:inherit;white-space:nowrap}
+nav button.on{background:var(--ac);color:#fff}
+main{max-width:900px;margin:0 auto;padding:1rem}
+.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:.75rem}
+.card{background:var(--card);border-left:5px solid var(--ac);padding:.9rem 1rem;border-radius:4px 12px 4px 12px}
+.card b{display:block;font:700 2.4rem/1 Georgia,serif}.card span{color:var(--mut)}
+form{display:flex;flex-wrap:wrap;gap:.5rem;background:var(--card);padding:.75rem;border-radius:10px;margin:.5rem 0}
+form>p{flex:100%;margin:0;font-weight:600}
+input,select{flex:1 1 140px;padding:.6rem;border:1px solid var(--ln);border-radius:6px;font:inherit;background:#fff}
+button{cursor:pointer}form button,.btn{background:var(--ac);color:#fff;border:0;padding:.6rem 1.1rem;border-radius:6px;font:inherit;font-weight:600}
+table{width:100%;border-collapse:collapse;background:var(--card);border-radius:10px;overflow:hidden}
+th,td{text-align:left;padding:.5rem .75rem;border-bottom:1px solid var(--ln)}th{background:#e3e9ef;font-weight:600}
+.chips{display:flex;flex-wrap:wrap;gap:.4rem;margin:.5rem 0}.chip{border:1px solid var(--ln);background:#fff;padding:.35rem .8rem;border-radius:99px;font:inherit}
+.chip.on{background:var(--ink);color:#fff}.vazio{color:var(--mut);padding:.75rem}
+#login{max-width:340px;margin:20vh auto}
+:focus-visible{outline:3px solid #f59e0b;outline-offset:2px}
+nav{padding-top:max(.5rem,env(safe-area-inset-top))}
+@media(max-width:640px){
+  main{padding:.75rem .75rem 3rem}h2{font-size:1.15rem}
+  nav button{padding:.7rem 1rem}
+  form{flex-direction:column;gap:.6rem}
+  input,select,form button{flex:none;width:100%;min-height:48px}
+  .chip{padding:.55rem 1rem}
+  .card b{font-size:2rem}
+  table{background:none}
+  table,tbody{display:block}
+  tr:first-child{display:none}
+  tr{display:block;background:var(--card);border:1px solid var(--ln);border-radius:10px;margin:.5rem 0;padding:.4rem .8rem}
+  td{display:flex;justify-content:space-between;gap:1rem;border:0;padding:.3rem 0;text-align:right}
+  td::before{content:attr(data-l);color:var(--mut);text-align:left}
+}
+</style></head><body>
+<div id="app"></div>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<script>
+// 1) Cole aqui os dados do seu projeto (Supabase > Project Settings > API)
+const SUPABASE_URL='https://eznzexfapeadikmbwkyl.supabase.co', SUPABASE_KEY='sb_publishable_2y8fniyH61hzrrQq0AtCxw_ZmqyCFFB';
+// O Supabase exige um email por baixo. O utilizador escreve só o nome; a app junta este sufixo.
+const DOMINIO='@code.com';
+
+if(SUPABASE_URL.startsWith('COLE')||SUPABASE_KEY.startsWith('COLE')){document.body.innerHTML='<p style="padding:2rem">Falta colar a URL e a chave do Supabase no topo do index.html.</p>';throw new Error('Supabase não configurado');}
+const sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY);
+const app=document.getElementById('app');
+let D={livros:[],kits:[],lideres:[],eventos:[],equipes:[],saidas:[],hist:[]},tab='painel',ev=null,session=null;
+const N={painel:'Painel',livros:'Livros',kits:'Kits',eventos:'Eventos',lideres:'Líderes',hist:'Histórico'};
+
+const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const sum=(a,f)=>a.reduce((s,x)=>s+f(x),0);
+const T=id=>D.livros.find(x=>x.id==id)?.titulo||'?';
+const K=k=>T(k.livro_a)+' + '+T(k.livro_b);
+const KK=id=>K(D.kits.find(k=>k.id==id));
+const L=id=>D.lideres.find(x=>x.id==id)?.nome||'?';
+const card=(n,l)=>`<div class="card"><b>${n}</b><span>${l}</span></div>`;
+const tbl=(h,r)=>r.length?`<table><tr>${h.map(x=>`<th>${x}</th>`).join('')}</tr>${r.map(x=>`<tr>${x.map((c,i)=>`<td data-l="${esc(h[i])}">${esc(c)}</td>`).join('')}</tr>`).join('')}</table>`:'<p class="vazio">Nada registado ainda.</p>';
+const sel=(n,arr,lab,ph)=>`<select name="${n}" required><option value="">${ph}</option>${arr.map(x=>`<option value="${x.id}">${esc(lab(x))}</option>`).join('')}</select>`;
+const num=(n,ph)=>`<input type="number" name="${n}" min="1" placeholder="${ph}" required>`;
+const obs='<input name="p_obs" placeholder="Observações (opcional)">';
+
+async function load(){
+  const q=t=>sb.from(t).select('*');
+  const r=await Promise.all([q('livros').order('titulo'),q('tipos_kit'),q('lideres').order('nome'),q('eventos').order('data',{ascending:false}),q('equipes').order('numero'),q('saidas'),q('historico').order('id',{ascending:false}).limit(200)]);
+  const e=r.find(x=>x.error); if(e) return alert(e.error.message);
+  [D.livros,D.kits,D.lideres,D.eventos,D.equipes,D.saidas,D.hist]=r.map(x=>x.data);
+  render();
+}
+const emFalta=()=>{const ab=D.eventos.filter(e=>!e.fechado).map(e=>e.id);
+  return D.saidas.filter(s=>s.saiu>s.voltou&&D.equipes.some(q=>q.id==s.equipe_id&&ab.includes(q.evento_id)));};
+
+const V={
+painel(){const rua=emFalta();
+  return `<div class="cards">${card(sum(D.livros,l=>l.caixas),'caixas fechadas')}${card(sum(D.livros,l=>l.soltos),'livros soltos')}${card(sum(D.kits,k=>k.qtd),'kits no CODE')}${card(sum(rua,s=>s.saiu-s.voltou),'kits na rua')}</div>
+  <h2>Livros</h2>${tbl(['Título','Caixas','Soltos'],D.livros.map(l=>[l.titulo,l.caixas,l.soltos]))}
+  <h2>Kits no CODE</h2>${tbl(['Kit','Quantidade'],D.kits.map(k=>[K(k),k.qtd]))}
+  <h2>Kits na rua</h2>${tbl(['Líder','Kit','Em falta'],rua.map(s=>[L(D.equipes.find(q=>q.id==s.equipe_id).lider_id),KK(s.tipo_kit_id),s.saiu-s.voltou]))}`;},
+livros(){return `<h2>Livros</h2>
+  <form data-tbl="livros"><p>Novo título</p><input name="titulo" placeholder="Título do livro" required><button>Adicionar título</button></form>
+  <form data-fn="receber_caixas"><p>Chegaram caixas</p>${sel('p_livro',D.livros,l=>l.titulo,'Título')}${num('p_n','Nº de caixas')}${obs}<button>Registar caixas</button></form>
+  <form data-fn="abrir_caixa"><p>Abrir uma caixa</p>${sel('p_livro',D.livros,l=>l.titulo,'Título')}${num('p_livros','Livros contados')}${obs}<button>Abrir caixa</button></form>
+  ${tbl(['Título','Caixas','Soltos'],D.livros.map(l=>[l.titulo,l.caixas,l.soltos]))}`;},
+kits(){return `<h2>Kits</h2>
+  <form data-fn="criar_kit"><p>Novo tipo de kit (a ordem não importa)</p>${sel('p_a',D.livros,l=>l.titulo,'Livro 1')}${sel('p_b',D.livros,l=>l.titulo,'Livro 2')}<button>Criar tipo</button></form>
+  <form data-fn="montar_kits"><p>Montar kits com livros soltos</p>${sel('p_kit',D.kits,K,'Tipo de kit')}${num('p_n','Nº de kits')}${obs}<button>Montar</button></form>
+  ${tbl(['Kit','No CODE'],D.kits.map(k=>[K(k),k.qtd]))}`;},
+eventos(){const e=D.eventos.find(x=>x.id==ev);
+  let h=`<h2>Eventos</h2><form data-tbl="eventos"><p>Novo evento</p><input type="date" name="data" required><input name="nota" placeholder="Nota (opcional)"><button>Criar evento</button></form>
+  <div class="chips">${D.eventos.map(x=>`<button class="chip ${x.id==ev?'on':''}" onclick="ev=${x.id};render()">${x.data}${x.fechado?' (fechado)':''}</button>`).join('')}</div>`;
+  if(!e) return h+'<p class="vazio">Escolha um evento acima.</p>';
+  const eqs=D.equipes.filter(q=>q.evento_id==e.id), lab=q=>'Equipa '+q.numero+' – '+L(q.lider_id);
+  h+=`<h2>Evento de ${e.data}${e.nota?' – '+esc(e.nota):''}</h2>`;
+  if(!e.fechado) h+=`<form data-tbl="equipes"><p>Nova equipa</p><input type="hidden" name="evento_id" value="${e.id}">${num('numero','Nº da equipa')}${sel('lider_id',D.lideres,l=>l.nome,'Líder')}<button>Adicionar equipa</button></form>
+  <form data-fn="saida_kits"><p>Saída de kits</p>${sel('p_equipe',eqs,lab,'Equipa')}${sel('p_kit',D.kits,K,'Kit')}${num('p_n','Quantidade')}${obs}<button>Registar saída</button></form>
+  <form data-fn="retorno_kits"><p>Retorno de kits</p>${sel('p_equipe',eqs,lab,'Equipa')}${sel('p_kit',D.kits,K,'Kit')}${num('p_n','Quantidade')}${obs}<button>Registar retorno</button></form>`;
+  h+=tbl(['Equipa','Líder','Kit','Saíram','Voltaram'],D.saidas.filter(s=>eqs.some(q=>q.id==s.equipe_id)).map(s=>{const q=eqs.find(x=>x.id==s.equipe_id);return [q.numero,L(q.lider_id),KK(s.tipo_kit_id),s.saiu,s.voltou]}));
+  return h+(e.fechado?'':`<p><button class="btn" onclick="fechar(${e.id})">Fechar acerto</button></p>`);},
+lideres(){const rua=emFalta();return `<h2>Líderes</h2>
+  <form data-tbl="lideres"><p>Novo líder</p><input name="nome" placeholder="Nome" required><button>Adicionar líder</button></form>
+  ${tbl(['Líder','Kits em falta de devolver'],D.lideres.map(l=>[l.nome,rua.filter(s=>D.equipes.find(q=>q.id==s.equipe_id).lider_id==l.id).map(s=>(s.saiu-s.voltou)+'× '+KK(s.tipo_kit_id)).join('; ')||'—']))}`;},
+hist(){return `<h2>Histórico</h2>${tbl(['Quando','Movimento','Detalhe','Qtd','Obs.'],D.hist.map(h=>[new Date(h.quando).toLocaleString('pt-PT'),h.tipo,h.descricao,h.qtd,h.obs||'']))}`;}
+};
+
+function render(){
+  if(!session){app.innerHTML=`<form id="login"><p>Estoque de livros</p><input name="email" placeholder="Utilizador" autocomplete="username" autocapitalize="none" required><input type="password" name="password" placeholder="Palavra-passe" required><button>Entrar</button></form>`;return;}
+  app.innerHTML=`<nav>${Object.entries(N).map(([k,v])=>`<button class="${k==tab?'on':''}" onclick="tab='${k}';render()">${v}</button>`).join('')}<button onclick="sb.auth.signOut()">Sair</button></nav><main>${V[tab]()}</main>`;
+}
+async function fechar(id){
+  if(!confirm('Fechar o acerto? Os kits não devolvidos passam a ser dos líderes.')) return;
+  const {error}=await sb.from('eventos').update({fechado:true}).eq('id',id);
+  error?alert(error.message):load();
+}
+app.addEventListener('submit',async e=>{
+  const f=e.target; e.preventDefault();
+  if(f.id==='login'){const {error}=await sb.auth.signInWithPassword({email:f.email.value.trim().toLowerCase()+DOMINIO,password:f.password.value});if(error)alert('Login inválido: '+error.message);return;}
+  const o={};
+  for(const el of f.elements){if(!el.name)continue;
+    o[el.name]=['number','hidden','select-one'].includes(el.type)?Number(el.value):(el.value||null);}
+  const {error}=f.dataset.fn?await sb.rpc(f.dataset.fn,o):await sb.from(f.dataset.tbl).insert(o);
+  error?alert(error.message):load();
+});
+render();
+sb.auth.onAuthStateChange((_,s)=>{session=s;s?load():render();});
+</script></body></html>
