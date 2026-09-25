@@ -28,6 +28,8 @@ th,td{text-align:left;padding:.5rem .75rem;border-bottom:1px solid var(--ln)}th{
 .ci{padding:.55rem .8rem;cursor:pointer}
 .ci:hover{background:#eef2f5}
 .ci.vazio{color:var(--mut);cursor:default}
+.btn-x{background:#fff;color:#b91c1c;border:1px solid #b91c1c;padding:.35rem .7rem;border-radius:6px;font:inherit;font-size:.85rem;white-space:nowrap}
+.btn-x:hover{background:#fef2f2}
 :focus-visible{outline:3px solid #f59e0b;outline-offset:2px}
 @media(max-width:640px){
   main{padding:.75rem .75rem 3rem}h2{font-size:1.15rem}
@@ -65,6 +67,7 @@ const KK=id=>K(D.kits.find(k=>k.id==id));
 const L=id=>D.lideres.find(x=>x.id==id)?.nome||'?';
 const card=(n,l)=>`<div class="card"><b>${n}</b><span>${l}</span></div>`;
 const tbl=(h,r)=>r.length?`<table><tr>${h.map(x=>`<th>${x}</th>`).join('')}</tr>${r.map(x=>`<tr>${x.map((c,i)=>`<td data-l="${esc(h[i])}">${esc(c)}</td>`).join('')}</tr>`).join('')}</table>`:'<p class="vazio">Nada registado ainda.</p>';
+const tblDel=(h,rows)=>rows.length?`<table><tr>${h.map(x=>`<th>${x}</th>`).join('')}<th></th></tr>${rows.map(r=>`<tr>${r.cols.map((c,i)=>`<td data-l="${esc(h[i])}">${esc(c)}</td>`).join('')}<td data-l="Ações"><button type="button" class="btn-x" data-del="${r.fn}" data-id="${r.id}" data-nome="${esc(r.nome)}">Excluir</button></td></tr>`).join('')}</table>`:'<p class="vazio">Nada registado ainda.</p>';
 const num=(n,ph)=>`<input type="number" name="${n}" min="1" placeholder="${ph}" required>`;
 const obs='<input name="p_obs" placeholder="Observações (opcional)">';
 const combo=(n,items,lab,ph)=>{const data=JSON.stringify(items.map(x=>({id:x.id,l:lab(x)}))).replace(/</g,'\\u003c');
@@ -100,14 +103,14 @@ livros(){return `<h2>Livros</h2>
   <form id="novoTitulo"><p>Novo título</p><input name="titulo" placeholder="Título do livro" required>${obs}<button>Adicionar título</button></form>
   <form data-fn="receber_caixas"><p>Chegaram caixas</p>${combo('p_livro',D.livros,l=>l.titulo,'Título')}${num('p_n','Nº de caixas')}${obs}<button>Registar caixas</button></form>
   <form data-fn="abrir_caixa"><p>Abrir uma caixa</p>${combo('p_livro',D.livros,l=>l.titulo,'Título')}${num('p_livros','Livros contados')}${obs}<button>Abrir caixa</button></form>
-  ${tbl(['Título','Caixas','Soltos'],D.livros.map(l=>[l.titulo,l.caixas,l.soltos]))}`;},
+  ${tblDel(['Título','Caixas','Soltos'],D.livros.map(l=>({cols:[l.titulo,l.caixas,l.soltos],fn:'excluir_livro',id:l.id,nome:l.titulo})))}`;},
 kits(){return `<h2>Kits</h2>
   <form data-fn="criar_kit"><p>Novo tipo de kit (a ordem não importa)</p>${combo('p_a',D.livros,l=>l.titulo,'Livro 1')}${combo('p_b',D.livros,l=>l.titulo,'Livro 2')}${obs}<button>Criar tipo</button></form>
   <form data-fn="montar_kits"><p>Montar kits com livros soltos</p>${combo('p_kit',D.kits,K,'Tipo de kit')}${num('p_n','Nº de kits')}${obs}<button>Montar</button></form>
-  ${tbl(['Kit','No CODE'],D.kits.map(k=>[K(k),k.qtd]))}`;},
+  ${tblDel(['Kit','No CODE'],D.kits.map(k=>({cols:[K(k),k.qtd],fn:'excluir_kit',id:k.id,nome:K(k)})))}`;},
 lideres(){const rua=emFalta();return `<h2>Líderes</h2>
   <form id="novoLider"><p>Novo líder</p><input name="nome" placeholder="Nome" required>${obs}<button>Adicionar líder</button></form>
-  ${tbl(['Líder','Kits em falta de devolver'],D.lideres.map(l=>[l.nome,rua.filter(s=>D.equipes.find(q=>q.id==s.equipe_id).lider_id==l.id).map(s=>(s.saiu-s.voltou)+'× '+KK(s.tipo_kit_id)).join('; ')||'—']))}`;},
+  ${tblDel(['Líder','Kits em falta de devolver'],D.lideres.map(l=>({cols:[l.nome,rua.filter(s=>D.equipes.find(q=>q.id==s.equipe_id).lider_id==l.id).map(s=>(s.saiu-s.voltou)+'× '+KK(s.tipo_kit_id)).join('; ')||'—'],fn:'excluir_lider',id:l.id,nome:l.nome})))}`;},
 eventos(){const e=D.eventos.find(x=>x.id==ev);
   let h=`<h2>Eventos</h2><form data-fn="criar_evento"><p>Novo evento</p><input type="date" name="p_data" required><input name="p_nota" placeholder="Nota (opcional)"><button>Criar evento</button></form>
   <div class="chips">${D.eventos.map(x=>`<button class="chip ${x.id==ev?'on':''}" onclick="ev=${x.id};render()">${x.data}${x.fechado?' (fechado)':''}</button>`).join('')}</div>`;
@@ -159,6 +162,13 @@ app.addEventListener('click',e=>{
   box.querySelector('.cl').style.display='none';
 });
 document.addEventListener('click',e=>{if(!e.target.closest('.combo')) document.querySelectorAll('.cl').forEach(c=>c.style.display='none');});
+app.addEventListener('click',async e=>{
+  const btn=e.target.closest('button[data-del]');
+  if(!btn) return;
+  if(!confirm('Excluir "'+btn.dataset.nome+'"? Esta ação não pode ser desfeita.')) return;
+  const {error}=await sb.rpc(btn.dataset.del,{p_id:Number(btn.dataset.id)});
+  error?alert(error.message):load();
+});
 
 app.addEventListener('submit',async e=>{
   const f=e.target; e.preventDefault();
