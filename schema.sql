@@ -4,7 +4,8 @@
 
 drop table if exists historico, saidas, equipes, eventos, lideres, tipos_kit, livros cascade;
 drop function if exists nome_kit, criar_livro, receber_caixas, abrir_caixa, criar_kit, montar_kits,
-  criar_lider, criar_evento, criar_equipe, saida_kits, retorno_kits, fechar_evento cascade;
+  criar_lider, criar_evento, criar_equipe, saida_kits, retorno_kits, fechar_evento,
+  excluir_livro, excluir_kit, excluir_lider cascade;
 
 create table livros(id bigserial primary key, titulo text not null unique,
   caixas int not null default 0 check(caixas>=0), soltos int not null default 0 check(soltos>=0));
@@ -126,6 +127,47 @@ create function fechar_evento(p_evento bigint) returns void language plpgsql as 
 begin
   update eventos set fechado=true where id=p_evento;
   insert into historico(categoria,tipo,descricao,obs) select 'Eventos','Evento fechado',to_char(data,'DD/MM/YYYY'),null from eventos where id=p_evento;
+end $$;
+
+-- Excluir título: só se não tiver caixas, livros soltos, nem ser usado por um tipo de kit
+create function excluir_livro(p_id bigint) returns void language plpgsql as $$
+declare l livros;
+begin
+  select * into l from livros where id=p_id;
+  if l.id is null then raise exception 'Título não encontrado'; end if;
+  if l.caixas>0 or l.soltos>0 then raise exception 'Este título ainda tem caixas ou livros soltos'; end if;
+  if exists(select 1 from tipos_kit where livro_a=p_id or livro_b=p_id) then
+    raise exception 'Este título é usado por um tipo de kit; apague o kit primeiro';
+  end if;
+  delete from livros where id=p_id;
+  insert into historico(categoria,tipo,descricao) values('Livros','Título excluído',l.titulo);
+end $$;
+
+-- Excluir tipo de kit: só se não houver kits desse tipo no CODE nem histórico de saídas
+create function excluir_kit(p_id bigint) returns void language plpgsql as $$
+declare k_nome text; k_qtd int;
+begin
+  select nome_kit(id),qtd into k_nome,k_qtd from tipos_kit where id=p_id;
+  if k_nome is null then raise exception 'Kit não encontrado'; end if;
+  if k_qtd>0 then raise exception 'Ainda há kits deste tipo no CODE'; end if;
+  if exists(select 1 from saidas where tipo_kit_id=p_id) then
+    raise exception 'Este kit já foi usado numa saída e não pode ser apagado';
+  end if;
+  delete from tipos_kit where id=p_id;
+  insert into historico(categoria,tipo,descricao) values('Kits','Tipo de kit excluído',k_nome);
+end $$;
+
+-- Excluir líder: só se nunca tiver integrado uma equipa (aberta ou já fechada)
+create function excluir_lider(p_id bigint) returns void language plpgsql as $$
+declare v_nome text;
+begin
+  select nome into v_nome from lideres where id=p_id;
+  if v_nome is null then raise exception 'Líder não encontrado'; end if;
+  if exists(select 1 from equipes where lider_id=p_id) then
+    raise exception 'Este líder já participou de uma equipa e não pode ser apagado';
+  end if;
+  delete from lideres where id=p_id;
+  insert into historico(categoria,tipo,descricao) values('Líderes','Líder excluído',v_nome);
 end $$;
 
 -- Só utilizadores com login acedem
