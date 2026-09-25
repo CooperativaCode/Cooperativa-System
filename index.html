@@ -68,7 +68,7 @@ const tbl=(h,r)=>r.length?`<table><tr>${h.map(x=>`<th>${x}</th>`).join('')}</tr>
 const num=(n,ph)=>`<input type="number" name="${n}" min="1" placeholder="${ph}" required>`;
 const obs='<input name="p_obs" placeholder="Observações (opcional)">';
 const combo=(n,items,lab,ph)=>{const data=JSON.stringify(items.map(x=>({id:x.id,l:lab(x)}))).replace(/</g,'\\u003c');
-  return `<div class="combo"><input data-s placeholder="${ph}" autocomplete="off" required><input type="hidden" name="${n}"><div class="cl"></div><script type="application/json">${data}</script></div>`;};
+  return `<div class="combo"><input data-s placeholder="${ph}" autocomplete="off" required><input type="hidden" name="${n}"><div class="cl"></div><script type="application/json">${data}<\/script></div>`;};
 
 // pesquisa tolerante a maiúsculas/acentos + deteção de nomes parecidos
 const norm=s=>(s||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().trim();
